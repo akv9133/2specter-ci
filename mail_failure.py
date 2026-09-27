@@ -53,7 +53,8 @@ def body() -> tuple[str, str]:
         cmds.append(f"gh workflow run {wf_file} --repo {repo}")
     at = f" at {failed}" if failed else ""
     subject = f"[2specter-ci] {wf} failed{at}"
-    page = (f"<p><b>{esc(wf)}</b> failed{esc(at)}. <a href=\"{esc(url)}\">Open the run</a></p>"
+    page = ('<p style="font-size:16px;margin:0 0 12px"><b>This alert is from 2Specter\'s CI.</b></p>'
+            f"<p><b>{esc(wf)}</b> failed{esc(at)}. <a href=\"{esc(url)}\">Open the run</a></p>"
             f"{fix}"
             f"<h3>Rerun</h3><pre>{esc(chr(10).join(cmds))}</pre>"
             f"<h3>Steps</h3><table cellpadding=4 border=1 style=\"border-collapse:collapse\">"
