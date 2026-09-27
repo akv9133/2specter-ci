@@ -30,7 +30,7 @@ jobs:
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       # Checkers are judged by "did it run": a red run is a result, not a fault.
       WATCHDOG_WATCHED: none
-      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:10,r2-check.yml:30
+      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:30,r2-check.yml:30
     steps:
       - uses: actions/checkout@v4
         with:
