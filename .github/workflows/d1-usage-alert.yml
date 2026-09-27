@@ -1,0 +1,55 @@
+name: Cloudflare usage alert (D1 rows and storage, Worker requests)
+
+# On the free plan the caps are hard and daily (reset 00:00 UTC): past them D1
+# stops answering and every Worker returns Error 1027, so this checks every 4h
+# at 60% of each cap. On the paid plan it checks month-to-date allowances.
+# Goes red and mails when anything crosses. The token needs Account
+# Analytics: Read and D1 read. Set CF_PLAN to paid once Workers Paid is bought.
+
+on:
+  schedule:
+    - cron: '23 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: rows_read threshold (default 10000000000)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_DATABASE_ID: ${{ secrets.CLOUDFLARE_DATABASE_ID }}
+      CF_PLAN: free
+      D1_DATABASE_NAME: 2mc
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      D1_ROWS_READ_ALERT: ${{ inputs.threshold || '10000000000' }}
+      D1_ROWS_WRITTEN_ALERT: '25000000'
+      D1_STORAGE_ALERT: '4000000000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_DATABASE_ID RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+          python: '3.12'
+      - id: check
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python scripts/monitor/d1_usage.py
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"

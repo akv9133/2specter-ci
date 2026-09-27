@@ -1,0 +1,54 @@
+name: prep
+description: >
+  Stop if any secret the job needs is empty, then check the private code repo
+  out into code/ and set up Python. Every workflow here starts with this.
+
+inputs:
+  need:
+    description: Space-separated names of env vars (from secrets) that must be non-empty.
+    required: true
+  deploy-key:
+    description: Read-only deploy key for the private code repo.
+    required: true
+  code-repo:
+    description: owner/name of the private code repo.
+    required: true
+  python:
+    description: Python version to set up, or empty to skip Python entirely.
+    default: '3.11'
+  pip:
+    description: Install code/sync/requirements.txt ('true' or 'false').
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Require secrets
+      shell: bash
+      env:
+        CODE_DEPLOY_KEY: ${{ inputs.deploy-key }}
+        CODE_REPO: ${{ inputs.code-repo }}
+        NEED: ${{ inputs.need }}
+      run: bash "$GITHUB_WORKSPACE/require_secrets.sh" CODE_DEPLOY_KEY CODE_REPO $NEED
+
+    - name: Check out the private code into code/
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.code-repo }}
+        ssh-key: ${{ inputs.deploy-key }}
+        path: code
+        persist-credentials: false
+
+    - name: Set up Python
+      if: inputs.python != ''
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python }}
+        cache: pip
+        cache-dependency-path: code/sync/requirements.txt
+
+    - name: Install Python deps
+      if: inputs.python != '' && inputs.pip == 'true'
+      shell: bash
+      working-directory: code
+      run: bash "$GITHUB_WORKSPACE/quiet.sh" pip install -q -r sync/requirements.txt

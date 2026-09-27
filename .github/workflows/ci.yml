@@ -1,0 +1,98 @@
+name: CI (build, typecheck, lint, tests)
+
+# Nightly, not on push: a push to the private code repo cannot trigger a run
+# here without billing that repo's minutes. Every step's output goes to a
+# private log that is mailed on failure, because this repo's logs are public.
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci
+  cancel-in-progress: true
+
+env:
+  RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+  ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+  EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Placeholders on purpose: the build prerenders against an unreachable DB
+      # and falls back to stub output, so CI needs no production secret.
+      D1_PROXY_URL: https://ci-placeholder.invalid
+      D1_PROXY_SECRET: ci-placeholder
+      BETTER_AUTH_SECRET: ci-placeholder-secret
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_SITE_URL: https://2specter.example
+      NEXT_PUBLIC_CDN_BASE_URL: https://cdn.2specter.example
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+          python: ''
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: code/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: code/pnpm-lock.yaml
+      - id: install
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" pnpm install --frozen-lockfile
+      - id: typecheck
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" pnpm typecheck
+      # The worker has its own tsconfig, so the app's typecheck cannot see it.
+      - id: worker-types
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" npx tsc --noEmit -p workers/d1-proxy/tsconfig.json
+      - id: lint
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" pnpm lint
+      - id: build
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" pnpm build
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: tests
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/ -q
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"

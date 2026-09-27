@@ -1,0 +1,53 @@
+name: R2 check (can the sync still write to R2?)
+
+# Writes a canary with the sync's own credentials and reads back the exact
+# bytes. Reads prove nothing: a key can keep read access after losing write,
+# and public CDN URLs keep serving long after the key is dead.
+
+on:
+  schedule:
+    - cron: '37 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-check
+  cancel-in-progress: false
+
+jobs:
+  r2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: selftest
+        name: Prove the checker still fires
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/test_r2_check.py -q
+      - id: check
+        name: Write and read back the canary
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.r2_check
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"

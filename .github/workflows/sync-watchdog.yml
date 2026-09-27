@@ -1,0 +1,60 @@
+name: Watchdog (are the scheduled checks still running?)
+
+# A check cannot report that it stopped running. GitHub also drops a share of
+# requested schedules, and disables a public repo's schedules after 60 days
+# without a commit. So every 6h this re-enables every workflow here (keepalive)
+# and checks each one's last RUN against its limit. Something outside this
+# repo watches this workflow in turn.
+
+on:
+  schedule:
+    - cron: '40 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      # Checkers are judged by "did it run": a red run is a result, not a fault.
+      WATCHDOG_WATCHED: none
+      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:10,r2-check.yml:30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: keepalive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=0
+          for f in .github/workflows/*.yml; do
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$(basename "$f")/enable" > /dev/null && n=$((n+1))
+          done
+          echo "re-enabled $n workflows"
+      - id: watchdog
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.watchdog
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
