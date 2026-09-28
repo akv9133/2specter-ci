@@ -1,0 +1,52 @@
+name: Runner watch (is the home Mac runner alive?)
+
+# The other half of the C4 mutual watch. Reads the private code repo's
+# runner-heartbeat runs via a fine-grained PAT and mails if they stopped, which
+# catches a sleeping Mac or a dead runner. Dormant until Arun sets the variable
+# RUNNER_WATCH_ENABLED=true and the secret RUNNER_WATCH_PAT (actions:read on the
+# code repo), so it never runs half-configured.
+
+on:
+  schedule:
+    - cron: '55 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: vars.RUNNER_WATCH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      RUNNER_WATCH_PAT: ${{ secrets.RUNNER_WATCH_PAT }}
+      GITHUB_TOKEN: ${{ secrets.RUNNER_WATCH_PAT }}
+      WATCHDOG_REPO: ${{ vars.CODE_REPO }}
+      WATCHDOG_WATCHED: none
+      WATCHDOG_WATCHED_RAN: runner-heartbeat.yml:14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: RESEND_API_KEY ALERT_EMAIL EMAIL_FROM RUNNER_WATCH_PAT
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: watch
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.watchdog
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
