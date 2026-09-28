@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -78,14 +79,24 @@ def main() -> int:
                  # Resend's edge rejects urllib's default User-Agent with a 403.
                  "User-Agent": "2specter-ci-mail/1.0"},
         method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            print(f"failure mailed (HTTP {r.status})")
-            return 0
-    except urllib.error.HTTPError as e:
-        print(f"::error::Resend refused the failure mail: HTTP {e.code}")
-    except OSError as e:
-        print(f"::error::could not reach Resend: {type(e).__name__}")
+    # Retry a transient failure: this is the last line of defence, so a lost
+    # failure-mail must not be one Resend blip. A 4xx (bad key/sender) fails fast.
+    last = ""
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                print(f"failure mailed (HTTP {r.status})")
+                return 0
+        except urllib.error.HTTPError as e:
+            if e.code < 500 and e.code != 429:
+                print(f"::error::Resend refused the failure mail: HTTP {e.code} (key or sender?)")
+                return 1
+            last = f"HTTP {e.code}"
+        except OSError as e:
+            last = f"{type(e).__name__}"
+        if attempt < 2:
+            time.sleep(5 * (attempt + 1))
+    print(f"::error::could not send the failure mail after 3 tries ({last})")
     return 1
 
 
