@@ -1,0 +1,63 @@
+name: Reader canary (does a cold page reach readers within 10 min?)
+
+# Requests one random page through the image proxy, exactly as the reader
+# does: 200 now, or 202 then 200 within 10 min. Also fails if the warm queue's
+# oldest pending request is over 15 min old. A single miss turns the run red;
+# mail goes out only when the previous run failed too (two misses in a row).
+
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: reader-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      D1_PROXY_URL: ${{ secrets.D1_PROXY_URL }}
+      D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
+      IMAGE_PROXY_SECRET: ${{ secrets.IMAGE_PROXY_SECRET }}
+      NEXT_PUBLIC_IMAGE_PROXY_URL: ${{ secrets.IMAGE_PROXY_URL }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: D1_PROXY_URL D1_PROXY_SECRET IMAGE_PROXY_SECRET NEXT_PUBLIC_IMAGE_PROXY_URL RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: prev
+        name: Did the previous run fail?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          c=$(gh run list -R "$GITHUB_REPOSITORY" --workflow reader-canary.yml --status completed -L 1 --json conclusion -q '.[0].conclusion')
+          echo "previous run: ${c:-none}"
+          echo "failed=$([ "$c" = failure ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: selftest
+        name: Prove the checker still fires
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/test_reader_canary.py -q
+      - id: check
+        name: Request a page through the proxy
+        working-directory: code
+        run: python -m sync.reader_canary
+      - name: Mail on a second failure in a row
+        if: failure() && steps.prev.outputs.failed == 'true'
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"

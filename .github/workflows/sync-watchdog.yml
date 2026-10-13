@@ -30,7 +30,7 @@ jobs:
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       # Checkers are judged by "did it run": a red run is a result, not a fault.
       WATCHDOG_WATCHED: none
-      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:30,r2-check.yml:30
+      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:30,r2-check.yml:30,daily-rollup.yml:30,reader-canary.yml:4,source-watch.yml:6
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,18 +41,29 @@ jobs:
           need: RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
           deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
           code-repo: ${{ vars.CODE_REPO }}
+      # PAUSED_WORKFLOWS (repo variable, space-separated file names) is the one
+      # switch for a planned pause: neither re-enabled here nor judged below.
       - id: keepalive
         env:
           GH_TOKEN: ${{ github.token }}
+          PAUSED: ${{ vars.PAUSED_WORKFLOWS }}
         run: |
           n=0
           for f in .github/workflows/*.yml; do
-            gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$(basename "$f")/enable" > /dev/null && n=$((n+1))
+            w=$(basename "$f")
+            case " $PAUSED " in *" $w "*) echo "paused: $w"; continue;; esac
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$w/enable" > /dev/null && n=$((n+1))
           done
           echo "re-enabled $n workflows"
       - id: watchdog
         working-directory: code
-        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.watchdog
+        env:
+          PAUSED: ${{ vars.PAUSED_WORKFLOWS }}
+        run: |
+          kept=$(printf '%s\n' "$WATCHDOG_WATCHED_RAN" | tr ',' '\n' | while read -r e; do
+            case " $PAUSED " in *" ${e%%:*} "*) ;; *) printf '%s,' "$e";; esac
+          done)
+          WATCHDOG_WATCHED_RAN="${kept%,}" bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.watchdog
       - name: Mail on failure
         if: failure()
         env:

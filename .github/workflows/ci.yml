@@ -32,8 +32,8 @@ jobs:
       D1_PROXY_SECRET: ci-placeholder
       BETTER_AUTH_SECRET: ci-placeholder-secret
       BETTER_AUTH_URL: http://localhost:3000
-      NEXT_PUBLIC_SITE_URL: https://2specter.example
-      NEXT_PUBLIC_CDN_BASE_URL: https://cdn.2specter.example
+      NEXT_PUBLIC_SITE_URL: https://specterscans.net
+      NEXT_PUBLIC_CDN_BASE_URL: https://cdn.specterscans.net
     steps:
       - uses: actions/checkout@v4
         with:

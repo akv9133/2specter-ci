@@ -1,0 +1,78 @@
+name: Source watch (is the upstream source reachable?)
+
+# Asks DNS-over-HTTPS whether the upstream site and its image host still have A records,
+# and whether the site answers. Emails once per state change (down, back up, or a change
+# in which candidate domains resolve), never every run. Hostnames come from secrets so
+# nothing here names the source. Runs on GitHub's runners, never the home Mac.
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_primary:
+        description: 'Test the alert mail: a fake primary host (e.g. does-not-exist.invalid). Uses its own state.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      WATCH_PRIMARY: ${{ inputs.test_primary || secrets.WATCH_PRIMARY }}
+      WATCH_IMAGE: ${{ secrets.WATCH_IMAGE }}
+      WATCH_OLD: ${{ secrets.WATCH_OLD }}
+      WATCH_ALTS: ${{ secrets.WATCH_ALTS }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: WATCH_PRIMARY WATCH_IMAGE WATCH_OLD WATCH_ALTS RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: selftest
+        name: Prove the checker still fires
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/test_source_watch.py -q
+      # last run's state, so it mails once per change and not every hour
+      - uses: actions/cache/restore@v4
+        with:
+          path: .source-watch
+          key: source-watch-${{ github.run_id }}
+          restore-keys: source-watch-
+      - id: check
+        name: Check DNS and HTTP
+        working-directory: code
+        # exit 1 = source down (the checker already mailed on the change); anything else non-zero = the check itself broke
+        env:
+          STATE: ${{ inputs.test_primary && '/tmp/test-state.json' || format('{0}/.source-watch/state.json', github.workspace) }}
+        run: |
+          set +e
+          python -m sync.source_watch --state "$STATE"
+          c=$?
+          echo "code=$c" >> "$GITHUB_OUTPUT"
+          exit $c
+      - if: always() && steps.check.outcome != 'skipped' && !inputs.test_primary
+        uses: actions/cache/save@v4
+        with:
+          path: .source-watch
+          key: source-watch-${{ github.run_id }}
+      - name: Mail when the check itself broke
+        if: failure() && steps.check.outputs.code != '1'
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
