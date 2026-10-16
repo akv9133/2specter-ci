@@ -35,6 +35,9 @@ jobs:
       D1_ROWS_READ_ALERT: ${{ inputs.threshold || '10000000000' }}
       D1_ROWS_WRITTEN_ALERT: '45000000'  # 50M included per month; alert with 5M of headroom
       D1_STORAGE_ALERT: '8500000000'  # D1 hard cap is 10 GB; 2mc sits at 7.57 GB after the 10-11 loads
+      D1_PROXY_URL: ${{ secrets.D1_PROXY_URL }}        # the minter queue's done count (index-only)
+      D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
+      KG_BACKFILL: ${{ vars.KG_BACKFILL }}              # 1 while the planned kg backfill runs (until 2026-11-06)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,7 +45,7 @@ jobs:
       - id: prep
         uses: ./.github/actions/prep
         with:
-          need: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_DATABASE_ID RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          need: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_DATABASE_ID D1_PROXY_URL D1_PROXY_SECRET RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
           deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
           code-repo: ${{ vars.CODE_REPO }}
           python: '3.12'
