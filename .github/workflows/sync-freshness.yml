@@ -1,0 +1,57 @@
+name: Sync freshness (is each synced source still producing chapters?)
+
+# Reads the newest chapter per source from series.latest_chapter_at, one index seek
+# each (series_source_latest, drizzle/0002), and mails when a source with a scheduled
+# sync has produced nothing for FRESHNESS_DAYS. A sync printing "0 added, 0 failed"
+# looks the same whether it is caught up or broken; only the clock tells them apart.
+# Sources without a sync yet print "no sync yet" and never alert.
+
+on:
+  schedule:
+    - cron: '10 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-freshness
+  cancel-in-progress: false
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      D1_PROXY_URL: ${{ secrets.D1_PROXY_URL }}
+      D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
+      DB_BACKEND: d1
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      FRESHNESS_SOURCES: md,mb
+      FRESHNESS_DAYS: '3'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: D1_PROXY_URL D1_PROXY_SECRET RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: selftest
+        name: Prove the check still fires
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/test_freshness_check.py -q
+      - id: check
+        name: Newest chapter per source
+        working-directory: code
+        # mails its own alert when a synced source is stale, so a red run here is expected
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.freshness_check
+      - name: Mail if the self-test broke
+        if: failure() && steps.selftest.outcome == 'failure'
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"

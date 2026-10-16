@@ -1,0 +1,52 @@
+name: Sync source md (new chapters for series we hold)
+
+# Reads the source's site-wide latest-updates feed, fetches only the series that are
+# behind, and adds their new chapters to D1, additive only (sync/md_latest.py). The daily
+# sync-freshness check alerts if this stops producing chapters.
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-md
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      D1_PROXY_URL: ${{ secrets.D1_PROXY_URL }}
+      D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
+      DB_BACKEND: d1
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: prep
+        uses: ./.github/actions/prep
+        with:
+          need: D1_PROXY_URL D1_PROXY_SECRET RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
+          code-repo: ${{ vars.CODE_REPO }}
+      - id: selftest
+        name: Prove the statements still hold
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m pytest tests/test_md_latest.py -q
+      - id: sync
+        name: Add new chapters
+        working-directory: code
+        run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.md_latest
+      - name: Mail on failure
+        if: failure()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
