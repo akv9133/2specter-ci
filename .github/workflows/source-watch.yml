@@ -1,7 +1,7 @@
 name: Source watch (is the upstream source reachable?)
 
 # Asks DNS-over-HTTPS whether the upstream site and its image host still have A records,
-# and whether the site answers. Emails once per state change (down, back up, or a change
+# and whether the site answers; also every other source's host (WATCH_HOSTS). Emails once per state change (down, back up, or a change
 # in which candidate domains resolve), never every run. Hostnames come from secrets so
 # nothing here names the source. Runs on GitHub's runners, never the home Mac.
 
@@ -31,6 +31,7 @@ jobs:
       WATCH_IMAGE: ${{ secrets.WATCH_IMAGE }}
       WATCH_OLD: ${{ secrets.WATCH_OLD }}
       WATCH_ALTS: ${{ secrets.WATCH_ALTS }}
+      WATCH_HOSTS: ${{ secrets.WATCH_HOSTS }}  # every other source, "label=host,..."
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
@@ -41,7 +42,7 @@ jobs:
       - id: prep
         uses: ./.github/actions/prep
         with:
-          need: WATCH_PRIMARY WATCH_IMAGE WATCH_OLD WATCH_ALTS RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          need: WATCH_PRIMARY WATCH_IMAGE WATCH_OLD WATCH_ALTS WATCH_HOSTS RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
           deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
           code-repo: ${{ vars.CODE_REPO }}
       - id: selftest
