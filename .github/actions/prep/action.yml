@@ -35,6 +35,7 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: ${{ inputs.code-repo }}
+        ref: ci-live              # moves only on Arun's go (fast-forward); main is not live
         ssh-key: ${{ inputs.deploy-key }}
         path: code
         persist-credentials: false
