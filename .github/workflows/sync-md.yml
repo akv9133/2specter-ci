@@ -1,8 +1,9 @@
-name: Sync source md (new chapters for series we hold)
+name: Sync source md (new chapters, other languages, new manga)
 
-# Reads the source's site-wide latest-updates feed, fetches only the series that are
-# behind, and adds their new chapters to D1, additive only (sync/md_latest.py). The daily
-# sync-freshness check alerts if this stops producing chapters.
+# Reads the source's site-wide chapter feed in the 8 languages the load carried and adds new
+# chapters to the md series we hold and the kg rows linked to them, additive only
+# (sync/md_latest.py). The 03:17 UTC run also adds the manga created in the last 48 h. The
+# daily sync-freshness check alerts if this stops producing chapters.
 
 on:
   schedule:
@@ -45,6 +46,11 @@ jobs:
         name: Add new chapters
         working-directory: code
         run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.md_latest
+      - id: new_manga
+        name: Add new manga (03:17 UTC run)
+        working-directory: code
+        run: |
+          if [ "$(date -u +%H)" = "03" ]; then bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.md_latest --new-manga; fi
       - name: Mail on failure
         if: failure()
         env:

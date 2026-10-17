@@ -1,8 +1,9 @@
-name: Sync source mb (new chapters for series we hold)
+name: Sync source mb (new chapters and new series)
 
-# Reads the source's site-wide latest-updates feed, fetches only the series that are
-# behind, and adds their new chapters to D1, additive only (sync/mb_latest.py). The daily
-# sync-freshness check alerts if this stops producing chapters.
+# Reads the source's site-wide latest-updates feed, fetches the series that are behind and
+# imports listed series we do not hold (up to MB_NEW_REQUESTS a run), additive only
+# (sync/mb_latest.py). The Monday 06:47 UTC run also diffs the sitemap for series added
+# without an update. The daily sync-freshness check alerts if this stops producing chapters.
 
 on:
   schedule:
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45            # 3 h run about 15 min at most, the weekly sitemap pass about 15 more
     env:
       D1_PROXY_URL: ${{ secrets.D1_PROXY_URL }}
       D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
@@ -45,6 +46,11 @@ jobs:
         name: Add new chapters
         working-directory: code
         run: bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.mb_latest
+      - id: discover
+        name: Sitemap pass for series added without an update (Monday 06:47 UTC run)
+        working-directory: code
+        run: |
+          if [ "$(date -u +%u%H)" = "106" ]; then bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.mb_latest --discover; fi
       - name: Mail on failure
         if: failure()
         env:
