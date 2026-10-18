@@ -49,8 +49,10 @@ jobs:
       - id: new_manga
         name: Add new manga (03:17 UTC run)
         working-directory: code
+        # 03-05: GitHub starts crons late (14 min to 2.3 h on 10-17); a skipped hour skipped the day.
+        # The next fire is 06:17, and the pass covers 48 h, so a repeat is harmless.
         run: |
-          if [ "$(date -u +%H)" = "03" ]; then bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.md_latest --new-manga; fi
+          case "$(date -u +%H)" in 03|04|05) bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.md_latest --new-manga ;; esac
       - name: Mail on failure
         if: failure()
         env:

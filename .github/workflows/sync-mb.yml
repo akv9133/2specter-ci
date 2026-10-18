@@ -50,7 +50,8 @@ jobs:
         name: Sitemap pass for series added without an update (Monday 06:47 UTC run)
         working-directory: code
         run: |
-          if [ "$(date -u +%u%H)" = "106" ]; then bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.mb_latest --discover; fi
+          # Monday 06-08 UTC: crons start late (up to 2.3 h on 10-17); the next fire is 09:47
+          case "$(date -u +%u%H)" in 106|107|108) bash "$GITHUB_WORKSPACE/quiet.sh" python -m sync.mb_latest --discover ;; esac
       - name: Mail on failure
         if: failure()
         env:
