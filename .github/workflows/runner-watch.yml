@@ -8,7 +8,7 @@ name: Runner watch (is the home Mac runner alive?)
 
 on:
   schedule:
-    - cron: '55 */6 * * *'
+    - cron: '55 */2 * * *'          # every 2 h: a kg outage must mail within about 8 h of the last good run
   workflow_dispatch:
 
 permissions:
@@ -30,7 +30,9 @@ jobs:
       RUNNER_WATCH_PAT: ${{ secrets.RUNNER_WATCH_PAT }}
       GITHUB_TOKEN: ${{ secrets.RUNNER_WATCH_PAT }}
       WATCHDOG_REPO: ${{ vars.CODE_REPO }}
-      WATCHDOG_WATCHED: none
+      # kg-sync by last SUCCESS, checked from GitHub-hosted: 10-19 20:34Z to 10-20 05:30Z had no kg fetch (the Mac,
+      # its backstop and the heartbeat were all offline) and nothing off the Mac noticed
+      WATCHDOG_WATCHED: kg-sync.yml:6
       WATCHDOG_WATCHED_RAN: runner-heartbeat.yml:14
     steps:
       - uses: actions/checkout@v4
