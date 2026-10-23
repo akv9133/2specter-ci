@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '5 3 * * *'
   workflow_dispatch:
+    inputs:
+      from_day:
+        description: 'Re-total from this unix day (0 = everything); blank = from the last rolled day'
+        required: false
+        default: ''
 
 concurrency:
   group: daily-rollup
@@ -49,6 +54,7 @@ jobs:
         env:
           D1_PROXY_URL:    ${{ secrets.D1_PROXY_URL }}
           D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
+          ROLLUP_FROM_DAY: ${{ inputs.from_day }}
         run: |
           set -eo pipefail
           pnpm rollup 2>&1 | tee /tmp/rollup.log
