@@ -13,6 +13,12 @@ jobs:
   rollup:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # prep's `need:` checks the job environment: with these only on the mail step, prep refused every run
+    # ("missing secrets", 10-23 03:26Z, the first run after the checkout fix)
+    env:
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL:    ${{ secrets.ALERT_EMAIL }}
+      EMAIL_FROM:     ${{ secrets.EMAIL_FROM }}
     steps:
       # the local prep action and mail_failure.py live in this repo: without a checkout every run since
       # the 10-13 publish failed at "Can't find 'action.yml'", and its failure mail failed with it
@@ -50,8 +56,5 @@ jobs:
       - name: Mail on failure
         if: failure()
         env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM:     ${{ secrets.EMAIL_FROM }}
-          ALERT_EMAIL:    ${{ secrets.ALERT_EMAIL }}
           STEPS_JSON:     ${{ toJSON(steps) }}
         run: python3 "$GITHUB_WORKSPACE/mail_failure.py"
