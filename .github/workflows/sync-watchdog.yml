@@ -29,8 +29,11 @@ jobs:
       ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       # Checkers are judged by "did it run": a red run is a result, not a fault.
+      # Limits sit above the gaps GitHub actually leaves between scheduled runs, not the cron interval: 10-24 to
+      # 11-02 the largest were reader-canary 8.9 h (cron 2 h), sync-md 10 h, sync-mb 9.5 h, source-watch and
+      # mint-watch 7.6 h, sync-freshness 10.8 h. At 4-7 h the watchdog went red on 11-02 with nothing broken.
       WATCHDOG_WATCHED: none
-      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:30,r2-check.yml:30,daily-rollup.yml:30,reader-canary.yml:4,source-watch.yml:6,mint-watch.yml:6,sync-md.yml:7,sync-mb.yml:7,sync-freshness.yml:14
+      WATCHDOG_WATCHED_RAN: ci.yml:30,d1-usage-alert.yml:30,r2-check.yml:30,daily-rollup.yml:30,reader-canary.yml:12,source-watch.yml:10,mint-watch.yml:10,sync-md.yml:12,sync-mb.yml:12,sync-freshness.yml:14
     steps:
       - uses: actions/checkout@v4
         with:

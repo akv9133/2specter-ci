@@ -3,8 +3,10 @@ name: Cloudflare usage alert (D1 rows and storage, Worker requests)
 # The account is on Workers Paid (2026-09-28): allowances are monthly from the
 # subscription's renewal date, and overage is billed. Checked daily, since a
 # crossing lasts until the period resets and a tighter cadence would only
-# repeat the same mail. Goes red and mails when anything crosses. The token
-# needs Account Analytics: Read, D1 read and billing read. CF_PLAN=free
+# repeat the same mail. Goes red and mails the day an allowance crosses (once a
+# period) and any day a check fails, the Workers Logs canary included, so a
+# quiet day is green. The token needs Account Analytics: Read, D1 read, billing
+# read and Workers Observability: Read. CF_PLAN=free
 # switches to the free plan's hard daily caps if the plan ever changes back.
 
 on:
@@ -22,7 +24,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10  # the Workers Logs canary waits up to 4.5 min for its error line
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
