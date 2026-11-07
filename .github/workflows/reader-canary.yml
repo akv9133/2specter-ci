@@ -27,6 +27,12 @@ jobs:
       D1_PROXY_SECRET: ${{ secrets.D1_PROXY_SECRET }}
       IMAGE_PROXY_SECRET: ${{ secrets.IMAGE_PROXY_SECRET }}
       NEXT_PUBLIC_IMAGE_PROXY_URL: ${{ secrets.IMAGE_PROXY_URL }}
+      # the page is picked from the R2 page blocks (11-07): after the N55 swap chapter_pages has no rows for that host,
+      # and the old D1 seek walked the whole table looking for one
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
@@ -37,7 +43,7 @@ jobs:
       - id: prep
         uses: ./.github/actions/prep
         with:
-          need: D1_PROXY_URL D1_PROXY_SECRET IMAGE_PROXY_SECRET NEXT_PUBLIC_IMAGE_PROXY_URL RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
+          need: D1_PROXY_URL D1_PROXY_SECRET IMAGE_PROXY_SECRET NEXT_PUBLIC_IMAGE_PROXY_URL R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET RESEND_API_KEY ALERT_EMAIL EMAIL_FROM
           deploy-key: ${{ secrets.CODE_DEPLOY_KEY }}
           code-repo: ${{ vars.CODE_REPO }}
       - id: prev
